@@ -1,164 +1,194 @@
-import React, { useState } from 'react';
-import { Plus, ThumbsUp, Trash2 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from './components/ui/card';
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, addDoc, onSnapshot, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 
-const PaperTracker = () => {
+const firebaseConfig = {
+  apiKey: "AIzaSyBh9zG67qSZ7rMCpNOg-aoG1Gu0l1HUWyk",
+  authDomain: "paper-tracker-da804.firebaseapp.com",
+  projectId: "paper-tracker-da804",
+  storageBucket: "paper-tracker-da804.firebasestorage.app",
+  messagingSenderId: "572254000726",
+  appId: "1:572254000726:web:1953f9e8d6f9d37984cdf7"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const App = () => {
   const [papers, setPapers] = useState([]);
   const [newPaper, setNewPaper] = useState({
     title: '',
     author: '',
     link: '',
-    description: '',
-    category: '',
-    submitter: ''
+    description: ''
   });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setPapers([...papers, { ...newPaper, id: Date.now(), votes: 0, voters: [] }]);
-    setNewPaper({
-      title: '',
-      author: '',
-      link: '',
-      description: '',
-      category: '',
-      submitter: ''
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "papers"), (snapshot) => {
+      const papersData = [];
+      snapshot.forEach((doc) => {
+        papersData.push({ id: doc.id, ...doc.data() });
+      });
+      setPapers(papersData);
     });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, "papers"), {
+        ...newPaper,
+        votes: 0,
+        timestamp: new Date().toISOString()
+      });
+
+      setNewPaper({
+        title: '',
+        author: '',
+        link: '',
+        description: ''
+      });
+    } catch (error) {
+      console.error("Error adding paper: ", error);
+    }
   };
 
-  const handleVote = (paperId, voterId = 'user1') => {
-    setPapers(papers.map(paper => {
-      if (paper.id === paperId) {
-        if (!paper.voters.includes(voterId)) {
-          return {
-            ...paper,
-            votes: paper.votes + 1,
-            voters: [...paper.voters, voterId]
-          };
-        }
-      }
-      return paper;
-    }));
+  const handleVote = async (paperId) => {
+    try {
+      const paperRef = doc(db, "papers", paperId);
+      const paper = papers.find(p => p.id === paperId);
+      await updateDoc(paperRef, {
+        votes: (paper.votes || 0) + 1
+      });
+    } catch (error) {
+      console.error("Error updating votes: ", error);
+    }
   };
 
-  const handleDelete = (paperId) => {
-    setPapers(papers.filter(paper => paper.id !== paperId));
+  const handleDelete = async (paperId) => {
+    try {
+      await deleteDoc(doc(db, "papers", paperId));
+    } catch (error) {
+      console.error("Error deleting paper: ", error);
+    }
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Submit New Paper</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                className="p-2 border rounded"
-                placeholder="Paper Title"
-                value={newPaper.title}
-                onChange={e => setNewPaper({...newPaper, title: e.target.value})}
-                required
-              />
-              <input
-                className="p-2 border rounded"
-                placeholder="Author(s)"
-                value={newPaper.author}
-                onChange={e => setNewPaper({...newPaper, author: e.target.value})}
-                required
-              />
-              <input
-                className="p-2 border rounded"
-                placeholder="Link to Paper"
-                value={newPaper.link}
-                onChange={e => setNewPaper({...newPaper, link: e.target.value})}
-                required
-              />
-              <input
-                className="p-2 border rounded"
-                placeholder="Your Name"
-                value={newPaper.submitter}
-                onChange={e => setNewPaper({...newPaper, submitter: e.target.value})}
-                required
-              />
-              <select
-                className="p-2 border rounded"
-                value={newPaper.category}
-                onChange={e => setNewPaper({...newPaper, category: e.target.value})}
-                required
-              >
-                <option value="">Select Category</option>
-                <option value="astronomy">Astronomy</option>
-                <option value="physics">Physics</option>
-                <option value="computer-science">Computer Science</option>
-                <option value="interdisciplinary">Interdisciplinary</option>
-              </select>
-              <textarea
-                className="p-2 border rounded md:col-span-2"
-                placeholder="Brief Description"
-                value={newPaper.description}
-                onChange={e => setNewPaper({...newPaper, description: e.target.value})}
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              <Plus size={16} />
-              Submit Paper
-            </button>
-          </form>
-        </CardContent>
-      </Card>
+    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+      <h1 style={{ marginBottom: '20px' }}>Paper Tracker</h1>
+      
+      <div style={{ marginBottom: '30px', padding: '20px', border: '1px solid #ccc', borderRadius: '5px' }}>
+        <h2>Submit New Paper</h2>
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '10px' }}>
+            <input
+              type="text"
+              placeholder="Paper Title"
+              value={newPaper.title}
+              onChange={e => setNewPaper({...newPaper, title: e.target.value})}
+              style={{ width: '100%', padding: '8px', marginBottom: '10px' }}
+              required
+            />
+            <input
+              type="text"
+              placeholder="Author(s)"
+              value={newPaper.author}
+              onChange={e => setNewPaper({...newPaper, author: e.target.value})}
+              style={{ width: '100%', padding: '8px', marginBottom: '10px' }}
+              required
+            />
+            <input
+              type="text"
+              placeholder="Link to Paper"
+              value={newPaper.link}
+              onChange={e => setNewPaper({...newPaper, link: e.target.value})}
+              style={{ width: '100%', padding: '8px', marginBottom: '10px' }}
+              required
+            />
+            <textarea
+              placeholder="Brief Description"
+              value={newPaper.description}
+              onChange={e => setNewPaper({...newPaper, description: e.target.value})}
+              style={{ width: '100%', padding: '8px', marginBottom: '10px', minHeight: '100px' }}
+              required
+            />
+          </div>
+          <button 
+            type="submit"
+            style={{
+              backgroundColor: '#007bff',
+              color: 'white',
+              padding: '10px 20px',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer'
+            }}
+          >
+            Submit Paper
+          </button>
+        </form>
+      </div>
 
-      <div className="space-y-4">
-        {papers.map(paper => (
-          <Card key={paper.id}>
-            <CardContent className="p-4">
-              <div className="flex justify-between items-start">
-                <div className="space-y-2">
-                  <h3 className="font-bold text-lg">{paper.title}</h3>
-                  <p className="text-sm text-gray-600">by {paper.author}</p>
-                  <p className="text-sm">Submitted by: {paper.submitter}</p>
-                  <p>{paper.description}</p>
-                  <div className="space-x-2">
-                    <span className="inline-block px-2 py-1 text-sm bg-gray-100 rounded">
-                      {paper.category}
-                    </span>
-                    <a
-                      href={paper.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-500 hover:text-blue-600"
-                    >
-                      View Paper
-                    </a>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => handleVote(paper.id)}
-                    className="flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
-                  >
-                    <ThumbsUp size={16} />
-                    {paper.votes}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(paper.id)}
-                    className="text-red-500 hover:text-red-600"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+      <div>
+        <h2>Submitted Papers</h2>
+        {papers.sort((a, b) => b.votes - a.votes).map(paper => (
+          <div 
+            key={paper.id} 
+            style={{
+              border: '1px solid #ddd',
+              padding: '15px',
+              marginBottom: '15px',
+              borderRadius: '5px'
+            }}
+          >
+            <h3>{paper.title}</h3>
+            <p>by {paper.author}</p>
+            <p>{paper.description}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <a 
+                  href={paper.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#007bff', textDecoration: 'none' }}
+                >
+                  View Paper
+                </a>
+                <button
+                  onClick={() => handleDelete(paper.id)}
+                  style={{
+                    backgroundColor: '#dc3545',
+                    color: 'white',
+                    padding: '5px 10px',
+                    border: 'none',
+                    borderRadius: '3px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Delete
+                </button>
               </div>
-            </CardContent>
-          </Card>
+              <button
+                onClick={() => handleVote(paper.id)}
+                style={{
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  padding: '5px 10px',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer'
+                }}
+              >
+                👍 {paper.votes || 0}
+              </button>
+            </div>
+          </div>
         ))}
       </div>
     </div>
   );
 };
 
-export default PaperTracker;
+export default App;
